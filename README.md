@@ -10,14 +10,25 @@ Ubuntu-Autoinstall in QEMU/OVMF erzeugt ein rohes `.img` (GPT, ESP + ext4-Root, 
 
 Aufbauphase. Aktuell enthalten:
 
+- `provision/install-pins-linux.sh` — das Provisioning-Rezept: macht aus einem frischen
+  Ubuntu Server 24.04 eine PINS-Appliance. Dokumentierter Hand-Installer **und** Skript-Kern
+  des späteren Image-Builds. Details: [`provision/README.md`](provision/README.md).
+- `provision/overlay/` — alles, was zusätzlich ins Dateisystem gehört: First-Boot-Units
+  (Root-FS vergrößern, SSH-Hostkeys erzeugen), Erstlogin-Wizard, Hotspot-Timer-Drop-in,
+  `pins-install-to-disk` (USB → interne SSD).
 - `pins-archive-keyring.gpg` — öffentlicher GPG-Schlüssel des PINS-x64-apt-Repos
   (Flat-Repo aus den GitHub-Release-Assets von
   [NeutraleNull/pins-x64](https://github.com/NeutraleNull/pins-x64)).
   Fingerprint: `D1C76CE6281D2DB3E814B1C8B99C955E609B4889`
 
-Der eigentliche Image-Build (`build-img.sh`, Autoinstall-Seed, Provisioning-Skript
-`install-pins-linux.sh`, Erstlogin-Wizard, Hotspot-Konfiguration) folgt.
-Der Image-Build läuft lokal (kein CI-Workflow); Ergebnisse werden separat veröffentlicht.
+Der Image-Build selbst (`build-img.sh`, Autoinstall-Seed, Payload-ISO) folgt.
+Er läuft lokal (kein CI-Workflow); Ergebnisse werden separat veröffentlicht.
+
+## Lizenz
+
+AGPL-3.0, siehe [`LICENSE`](LICENSE). Teile sind von
+[DanWBR/NINA.Polaris](https://github.com/DanWBR/NINA.Polaris) abgeleitet — Herkunft je Datei in
+[`NOTICE.md`](NOTICE.md).
 
 ## apt-Quelle (Client-Konfiguration)
 

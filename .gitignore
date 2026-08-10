@@ -1,0 +1,7 @@
+# Build artefacts of the image build (AP6). None of this belongs in git:
+# the payload directory holds several hundred MB of pre-fetched .deb files,
+# and the images are multi-GB.
+payload/
+*.img
+*.img.zst
+*.iso
