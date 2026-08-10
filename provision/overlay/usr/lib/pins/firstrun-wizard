@@ -45,14 +45,49 @@ RIG_NAME_CMD=/usr/local/bin/pins-rig-name
 [ "$(id -u)" -eq 0 ] || { echo "must run as root"; exit 1; }
 
 install -d -m 0755 /var/lib/pins
-exec 9>"$LOCK"
+
+# A wizard whose session died is orphaned, not finished. sudoers ships
+# `Defaults use_pty`, so the wizard runs on a pty of its own and gets no SIGHUP
+# when the SSH connection drops: it sits on a dialog nobody can answer and keeps
+# holding the lock. Every later login was then told "already running", and the
+# setup could not be completed short of a reboot.
+#
+# Detecting the orphan automatically is unreliable - on a systemd host such a
+# process is re-parented to the user manager, not to init, so the usual
+# "parent is PID 1" test does not hold. Ask instead: the operator knows whether
+# their own connection dropped, and a wrong answer costs nothing, while an
+# undetected orphan costs a reboot. Two people racing the wizard on a
+# single-user appliance is the far less likely case.
+#
+# Opened read-write on purpose: '>' would truncate the file and destroy the
+# holder's PID before it can be read.
+exec 9<>"$LOCK"
 if ! flock -n 9; then
-    # Two logins at once. The second one must not race the first through
-    # passwd/nmcli, so it says so and gets out of the way.
-    whiptail --title "$TITLE" --msgbox \
-        "Setup is already running in another session.\n\nFinish it there, then log in again." 10 60
-    exit 0
+    holder="$(head -n1 "$LOCK" 2>/dev/null | tr -cd '0-9')"
+    if whiptail --title "$TITLE" --yesno \
+        "Setup is already running in another session.\n\nIf that session was disconnected, you can take it over here and start again.\n\nTake over?" \
+        12 64
+    then
+        # The whole process group, not just the holder: children inherit fd 9
+        # and keep the lock alive on their own, so killing the wizard alone
+        # leaves whiptail (or a hung nmcli) holding it.
+        if [ -n "$holder" ]; then
+            kill -TERM "-$holder" 2>/dev/null || kill -TERM "$holder" 2>/dev/null || true
+            sleep 2
+            kill -KILL "-$holder" 2>/dev/null || kill -KILL "$holder" 2>/dev/null || true
+        fi
+    else
+        exit 0
+    fi
+    if ! flock -w 10 9; then
+        whiptail --title "$TITLE" --msgbox \
+            "Could not take over the other session.\n\nReboot the device and log in again." 10 64
+        exit 0
+    fi
 fi
+# Leave a trail for the take-over above. Rewriting the path keeps the inode, so
+# the lock held on fd 9 stays valid.
+printf '%s\n' "$$" > "$LOCK"
 command -v whiptail >/dev/null || { echo "whiptail missing"; exit 1; }
 
 HOTSPOT_PW_CHANGED=0
