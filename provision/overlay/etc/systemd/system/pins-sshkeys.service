@@ -1,0 +1,34 @@
+# Derived from NINA.Polaris packaging/deb/lib/systemd/system/polaris-sshkeys.service (AGPL-3.0).
+# Upstream: https://github.com/DanWBR/NINA.Polaris
+# Changes: renamed polaris->pins, ExecStart points at /usr/local/lib/pins.
+[Unit]
+# Creates the SSH host keys before sshd needs them. A shipped image carries no
+# host keys on purpose (every flashed device would otherwise share one identity
+# and anyone holding the image could impersonate all of them), and nothing else
+# on an already-installed system generates them: the openssh-server postinst
+# runs once, at package install time, which for an image is on the build host.
+# Without this unit sshd fails its ExecStartPre=sshd -t on every boot and port 22
+# answers "connection refused" on a headless box.
+#
+# Ordered before ssh.service only, NOT ssh.socket. Adding ssh.socket forms an
+# ordering cycle (ssh.socket -> sockets.target -> basic.target -> this unit,
+# which is WantedBy=multi-user.target); systemd breaks such a cycle by DELETING
+# a job, and upstream measured it deleting ssh.socket -- the unit meant to fix
+# SSH would be what disables it. A socket-activated sshd is spawned on the first
+# connection, long after multi-user.target, so it already sees the keys.
+#
+# No ConditionPathExists on the keys: the script is idempotent (ssh-keygen -A
+# only creates what is missing) and "already present" in the journal is worth
+# more than a skipped unit.
+Description=Generate SSH host keys when missing
+ConditionPathExists=/usr/sbin/sshd
+Before=ssh.service sshd.service
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/pins/pins-sshkeys.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

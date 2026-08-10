@@ -1,0 +1,23 @@
+# Derived from NINA.Polaris packaging/deb/lib/systemd/system/polaris-growroot.service (AGPL-3.0).
+# Upstream: https://github.com/DanWBR/NINA.Polaris
+# Changes: renamed polaris->pins, ExecStart points at /usr/local/lib/pins,
+#          ordered before pins.service.
+[Unit]
+# Grows the root partition + filesystem to fill the disk on the first boot of a
+# flashed image. Ships in the overlay rather than in a .deb so that a hand
+# installation gets it too.
+#
+# No ConditionPathExists here on purpose. The script owns the decision and only
+# records "done" once it has verified the filesystem covers the partition, so a
+# boot where growpart was missing gets another chance.
+Description=Grow the PINS root filesystem to fill the disk
+After=local-fs.target
+Before=pins.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/pins/pins-growroot.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

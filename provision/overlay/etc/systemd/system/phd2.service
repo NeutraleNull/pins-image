@@ -1,0 +1,26 @@
+[Unit]
+# PHD2 guiding, headless, on the Xvfb display from xvfb.service.
+#
+# Shipped DISABLED. PHD2 is only useful once an equipment profile exists in
+# ~/.phd2, and that profile is created interactively; an enabled-but-unprofiled
+# PHD2 would just restart-loop in the journal. The device API may turn it on
+# later -- the pinsdaemon sudoers whitelist already permits systemctl on phd2 --
+# or the provisioning script can do it with PINS_ENABLE_PHD2=1.
+#
+# Requires= (not Wants=) on xvfb.service: without the display PHD2 exits
+# immediately, so starting it without the framebuffer is never right.
+Description=PHD2 guiding (headless)
+Requires=xvfb.service
+After=xvfb.service network.target
+
+[Service]
+Type=simple
+User=pins
+Group=pins
+Environment=DISPLAY=:99
+ExecStart=/usr/bin/phd2
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

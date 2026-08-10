@@ -1,0 +1,21 @@
+[Unit]
+# X virtual framebuffer on :99. PHD2 is a GTK application with no headless mode,
+# so on an appliance without a desktop it needs a display to attach to.
+#
+# Shipped DISABLED by default, exactly like phd2.service: PHD2 without an
+# equipment profile is useless and the profile is created interactively. phd2
+# pulls this unit in via Requires=, so "systemctl enable --now phd2" (which the
+# pinsdaemon sudoers whitelist allows the API to run) starts the framebuffer as
+# well without the operator having to know about it.
+Description=X virtual framebuffer for headless PHD2
+After=local-fs.target
+
+[Service]
+Type=simple
+# -nolisten tcp: nothing outside this machine has any business on :99.
+ExecStart=/usr/bin/Xvfb :99 -screen 0 1280x800x24 -nolisten tcp
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
