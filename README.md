@@ -14,7 +14,7 @@ Aufbauphase. Aktuell enthalten:
   Ubuntu Server 24.04 eine PINS-Appliance. Dokumentierter Hand-Installer **und** Skript-Kern
   des späteren Image-Builds. Details: [`provision/README.md`](provision/README.md).
 - `provision/overlay/` — alles, was zusätzlich ins Dateisystem gehört: First-Boot-Units
-  (Root-FS vergrößern, SSH-Hostkeys erzeugen), Erstlogin-Wizard, Hotspot-Timer-Drop-in,
+  (Root-FS vergrößern, SSH-Hostkeys erzeugen), Hotspot-Timer-Drop-in,
   `pins-install-to-disk` (USB → interne SSD).
 - `pins-archive-keyring.gpg` — öffentlicher GPG-Schlüssel des PINS-x64-apt-Repos
   (Flat-Repo aus den GitHub-Release-Assets von

@@ -22,8 +22,9 @@ NetworkManager. On a machine you are logged into over the network, the SSH
 session can drop when NetworkManager takes over after the reboot. Run it on the
 console, or over a wired connection you can re-establish.
 
-After the reboot, log in once as `pins`: PAM forces a password change and the
-first-run wizard walks through network and rig name.
+After the reboot the device is reachable over SSH as `pins`/`pins`; changing
+the password is optional (`passwd`). Wi-Fi is configured through the
+Touch-N-Stars app.
 
 ## What it configures
 
@@ -35,7 +36,7 @@ first-run wizard walks through network and rig name.
 | Astronomy | `indi-full`, PHD2 (+Xvfb, both disabled by default), astrometry.net + tycho2, ASTAP GUI/CLI + D50 |
 | PINS | `pins`, the five plugins and `pinsdaemon` from the signed apt repository |
 | First boot | root filesystem grows to the disk, SSH host keys are generated |
-| First login | wizard for password, network and rig name |
+| First login | plain shell; default credentials stay until changed by the user |
 | Hardware | suspend masked, brltty masked (it steals the CH340 serial bridge), persistent journal |
 
 ## Knobs
@@ -83,11 +84,8 @@ the file modes git cannot record:
 
 | Path | Mode |
 |---|---|
-| `/usr/lib/pins/firstrun-wizard` | 0755 |
 | `/usr/local/sbin/pins-install-to-disk` | 0755 |
 | `/usr/local/lib/pins/pins-growroot.sh`, `pins-sshkeys.sh` | 0755 |
-| `/etc/sudoers.d/pins-firstrun` | **0440**, validated with `visudo -cf` |
-| `/etc/profile.d/00-pins-firstrun.sh` | 0644 |
 | `/usr/share/keyrings/pins-archive-keyring.gpg` | 0644 |
 
 ## Re-running

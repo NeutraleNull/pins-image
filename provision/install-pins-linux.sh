@@ -17,14 +17,17 @@
 #   - ASTAP (GUI + CLI) and the D50 star database
 #   - the PINS stack from our signed apt repository: pins, the plugins,
 #     pinsdaemon
-#   - first-boot units (grow root, generate SSH host keys) and the first-login
-#     wizard, both from provision/overlay
+#   - first-boot units (grow root, generate SSH host keys) from
+#     provision/overlay
+#
+# There is no first-login wizard and no forced password change (E14): the
+# default credentials pins/pins stay valid, changing the password is voluntary
+# (`passwd`), and the device is configured through the Touch'N'Stars app.
 #
 # Modes (PINS_SETUP_MODE, or --appliance / --addon):
 #
 #   appliance (default)  A machine dedicated to PINS. Also sets the hostname,
-#                        switches to NetworkManager, masks suspend and brltty,
-#                        installs the wizard and forces a password change.
+#                        switches to NetworkManager, masks suspend and brltty.
 #   addon                Someone's existing machine. Installs the software and
 #                        touches nothing else. Prepared, not yet tested.
 #
@@ -215,7 +218,7 @@ echo "PINS provisioning: mode=$PINS_SETUP_MODE user=$PINS_USER hostname=$TARGET_
 banner "Base tools"
 apt-get update || note_fail "apt update (base)"
 apt_try software-properties-common wget ca-certificates curl gnupg unzip \
-        cloud-guest-utils gdisk rsync dosfstools parted grub-efi-amd64-bin whiptail
+        cloud-guest-utils gdisk rsync dosfstools parted grub-efi-amd64-bin
 
 # ---------------------------------------------------------------------------
 # 2. Local configuration (no network needed, so it comes first)
@@ -384,17 +387,13 @@ if [ "$OVERLAY_OK" = "1" ]; then
     # tar and cp both honour the umask of whatever produced the source, and git
     # cannot record 0440 at all, so the modes are re-applied here rather than
     # trusted.
-    chmod 0755 /usr/lib/pins/firstrun-wizard /usr/local/sbin/pins-install-to-disk \
+    chmod 0755 /usr/local/sbin/pins-install-to-disk \
                /usr/local/lib/pins/pins-growroot.sh /usr/local/lib/pins/pins-sshkeys.sh 2>/dev/null
-    chmod 0440 /etc/sudoers.d/pins-firstrun 2>/dev/null
-    chmod 0644 /etc/profile.d/00-pins-firstrun.sh \
-               /usr/share/keyrings/pins-archive-keyring.gpg 2>/dev/null
-    chown -R root:root /etc/pins /usr/lib/pins /usr/local/lib/pins 2>/dev/null
-    visudo -cf /etc/sudoers.d/pins-firstrun >/dev/null 2>&1 \
-        || { rm -f /etc/sudoers.d/pins-firstrun; note_fail "sudoers pins-firstrun"; }
+    chmod 0644 /usr/share/keyrings/pins-archive-keyring.gpg 2>/dev/null
+    chown -R root:root /etc/pins /usr/local/lib/pins 2>/dev/null
 else
     # Not fatal: the software should still install so the marker says something
-    # useful. But without the overlay there is no wizard and no first-boot unit.
+    # useful. But without the overlay there are no first-boot units.
     note_crit "overlay"
 fi
 
@@ -510,8 +509,8 @@ systemctl enable pins-wifi-watchdog.timer  >/dev/null 2>&1 || note_fail "enable 
 # Written AFTER the package, and handed back to the daemon's user: the API
 # rewrites both files at runtime (hotspot_config.py opens them "w").
 if [ -d /opt/pinsdaemon/app ]; then
-    # Shipped state: hotspot on, until the wizard or the app configures a
-    # station. desired_mode=hotspot makes the watchdog raise the AP on its first
+    # Shipped state: hotspot on, until the app configures a station.
+    # desired_mode=hotspot makes the watchdog raise the AP on its first
     # run instead of waiting for three failed gateway checks; pins-wifi-
     # profile.py resets it to "auto" as soon as a station connection succeeds.
     cat > /opt/pinsdaemon/app/wifi_config.json <<'EOF'
@@ -581,7 +580,7 @@ fi
 install_deb "d50_star_database.deb" "${SF}/star_databases/d50_star_database.deb" "astap d50" || true
 
 # ---------------------------------------------------------------------------
-# 8. First-boot units, wizard flag, forced password change
+# 8. First-boot units
 # ---------------------------------------------------------------------------
 if [ "$PINS_SETUP_MODE" = appliance ]; then
 banner "First boot units"
@@ -596,13 +595,7 @@ if [ "$PINS_ENABLE_PHD2" = "1" ]; then
 fi
 
 install -d -m 0755 /var/lib/pins
-: > /var/lib/pins/firstrun
-chmod 0644 /var/lib/pins/firstrun
 rm -f /var/lib/pins/growroot.done          # a flashed image must grow on first boot
-
-# Last thing in this section so that debug logins during the build are not
-# fighting a forced password change.
-chage -d 0 "$PINS_USER" || note_fail "chage -d 0 $PINS_USER"
 fi
 
 # ---------------------------------------------------------------------------
@@ -635,8 +628,7 @@ else
 apt-get clean || true
 fi
 
-# /etc/pins/rig-name and /var/lib/pins/firstrun are part of the shipped state -
-# they are never removed here.
+# /etc/pins/rig-name is part of the shipped state - it is never removed here.
 
 # ---------------------------------------------------------------------------
 # Marker + summary
