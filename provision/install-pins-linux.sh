@@ -714,15 +714,21 @@ if [ "$PINS_SETUP_MODE" = appliance ]; then
 banner "First boot units"
 systemctl enable pins-growroot.service >/dev/null 2>&1 || note_fail "enable growroot"
 systemctl enable pins-sshkeys.service  >/dev/null 2>&1 || note_fail "enable sshkeys"
-# Seed PHD2 profile (O5). With a virgin ~/.phd2, PHD2 parks ALL JSON-RPC
-# handling on port 4400 behind its first-profile dialog - the app can never
-# reach it (measured during the s0e PHD2 investigation). The placeholders only
-# need to be something other than "None"; the real equipment is set later by
-# the app over RPC. Never overwrite an existing file: a re-run must not
-# destroy a real user profile.
-if [ ! -f "$PHOME/.phd2/PHDGuidingV2" ]; then
-    install -d -m 0755 -o "$PINS_USER" -g "$PINS_USER" "$PHOME/.phd2"
-    cat > "$PHOME/.phd2/PHDGuidingV2" <<'EOF'
+# Seed PHD2 config (O5, path fixed per QA B1). Without a config, PHD2 parks
+# ALL JSON-RPC handling on port 4400 behind its first-profile wizard (measured
+# during the s0e PHD2 investigation). The real config is the DOTFILE
+# ~/.PHDGuidingV2 straight in the home directory - ~/.phd2/ is only PHD2's
+# data directory (darks_defects etc.), a config placed there is ignored.
+# ConfigVersion=2001 must be the first line: without it IsNewInstance() still
+# fires and the service runs forever in the wizard state with an undefined
+# temp profile (RPC would answer, but against undefined state). The
+# placeholders only need to be something other than "None"; the real
+# equipment is set later by the app over RPC. Never overwrite an existing
+# file: a re-run must not destroy a real user profile.
+install -d -m 0755 -o "$PINS_USER" -g "$PINS_USER" "$PHOME/.phd2"
+if [ ! -f "$PHOME/.PHDGuidingV2" ]; then
+    cat > "$PHOME/.PHDGuidingV2" <<'EOF'
+ConfigVersion=2001
 currentProfile=1
 [profile/1]
 name=pins
@@ -731,8 +737,8 @@ LastMenuChoice=Simulator
 [profile/1/scope]
 LastMenuChoice=On-camera
 EOF
-    chmod 0644 "$PHOME/.phd2/PHDGuidingV2"
-    chown "$PINS_USER:$PINS_USER" "$PHOME/.phd2/PHDGuidingV2"
+    chmod 0644 "$PHOME/.PHDGuidingV2"
+    chown "$PINS_USER:$PINS_USER" "$PHOME/.PHDGuidingV2"
 fi
 
 # phd2 + xvfb are enabled by default (O5 revision): the seed profile above

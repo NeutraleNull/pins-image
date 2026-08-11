@@ -3,8 +3,8 @@
 # so on an appliance without a desktop it needs a display to attach to.
 #
 # Enabled by default, exactly like phd2.service (O5): the provisioning seeds a
-# minimal ~/.phd2 profile, so PHD2 starts headless instead of blocking on its
-# first-run dialog; PINS_ENABLE_PHD2=0 opts out. phd2 pulls this unit in via
+# minimal ~/.PHDGuidingV2, so PHD2 starts headless instead of blocking on its
+# first-run wizard; PINS_ENABLE_PHD2=0 opts out. phd2 pulls this unit in via
 # Requires=, so "systemctl enable --now phd2" (which the pinsdaemon sudoers
 # whitelist allows the API to run) starts the framebuffer as well without the
 # operator having to know about it.
