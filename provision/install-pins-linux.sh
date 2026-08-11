@@ -52,7 +52,7 @@
 #   PINS_APT_URI           apt source URI                 (<owner>/pins-x64 releases)
 #   PINS_IMAGE_REPO        overlay fallback download      (NeutraleNull/pins-image)
 #   PINS_OVERLAY_REF       branch/tag/SHA for the overlay fallback (main)
-#   PINS_ENABLE_PHD2       1 = enable phd2 + xvfb         (0)
+#   PINS_ENABLE_PHD2       0 = opt out of phd2 + xvfb     (1)
 #   PINS_SKIP_SANITIZE     1 = skip section 9             (0, auto 1 on a live system)
 #
 # Robustness rules, each of them learned the hard way:
@@ -90,7 +90,7 @@ PINS_REPO_OWNER="${PINS_REPO_OWNER:-NeutraleNull}"
 PINS_APT_URI="${PINS_APT_URI:-https://github.com/${PINS_REPO_OWNER}/pins-x64/releases/latest/download}"
 PINS_IMAGE_REPO="${PINS_IMAGE_REPO:-NeutraleNull/pins-image}"
 PINS_OVERLAY_REF="${PINS_OVERLAY_REF:-main}"
-PINS_ENABLE_PHD2="${PINS_ENABLE_PHD2:-0}"
+PINS_ENABLE_PHD2="${PINS_ENABLE_PHD2:-1}"
 # Remember whether the caller SET this, not just what it says: on a live system
 # the default flips to 1 (see below), and only an explicit assignment may
 # override that. Without the distinction the sanitising could never be
@@ -704,9 +704,31 @@ if [ "$PINS_SETUP_MODE" = appliance ]; then
 banner "First boot units"
 systemctl enable pins-growroot.service >/dev/null 2>&1 || note_fail "enable growroot"
 systemctl enable pins-sshkeys.service  >/dev/null 2>&1 || note_fail "enable sshkeys"
-# PHD2 stays off by default: without an equipment profile in ~/.phd2 it is
-# useless, and the profile is made interactively. xvfb follows phd2 because it
-# only exists to give phd2 a display.
+# Seed PHD2 profile (O5). With a virgin ~/.phd2, PHD2 parks ALL JSON-RPC
+# handling on port 4400 behind its first-profile dialog - the app can never
+# reach it (measured during the s0e PHD2 investigation). The placeholders only
+# need to be something other than "None"; the real equipment is set later by
+# the app over RPC. Never overwrite an existing file: a re-run must not
+# destroy a real user profile.
+if [ ! -f "$PHOME/.phd2/PHDGuidingV2" ]; then
+    install -d -m 0755 -o "$PINS_USER" -g "$PINS_USER" "$PHOME/.phd2"
+    cat > "$PHOME/.phd2/PHDGuidingV2" <<'EOF'
+currentProfile=1
+[profile/1]
+name=pins
+[profile/1/camera]
+LastMenuChoice=Simulator
+[profile/1/scope]
+LastMenuChoice=On-camera
+EOF
+    chmod 0644 "$PHOME/.phd2/PHDGuidingV2"
+    chown "$PINS_USER:$PINS_USER" "$PHOME/.phd2/PHDGuidingV2"
+fi
+
+# phd2 + xvfb are enabled by default (O5 revision): the seed profile above
+# removes the old blocker (an unconfigured PHD2 was useless), and ~150-250 MB
+# of RAM for the pair is an accepted cost. PINS_ENABLE_PHD2=0 opts out; xvfb
+# follows phd2 because it only exists to give phd2 a display.
 if [ "$PINS_ENABLE_PHD2" = "1" ]; then
     systemctl enable xvfb.service >/dev/null 2>&1 || note_fail "enable xvfb"
     systemctl enable phd2.service >/dev/null 2>&1 || note_fail "enable phd2"

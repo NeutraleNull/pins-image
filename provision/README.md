@@ -33,7 +33,7 @@ Touch-N-Stars app.
 | Hostname | `pins`, and `/etc/pins/rig-name` is written **before** pinsdaemon is installed so its postinst cannot rename the host to `pins-<hex>` |
 | Network | NetworkManager as the netplan renderer, `systemd-networkd` disabled |
 | Wi-Fi | fallback hotspot `pinspot` (WPA2), shipped as `desired_mode=hotspot`; watchdog first run 20 s after boot, then every 60 s; the AP profile is created with autoconnect=no — the daemon raises it |
-| Astronomy | `indi-full`, PHD2 (+Xvfb, both disabled by default), astrometry.net + tycho2, ASTAP GUI/CLI + D50 |
+| Astronomy | `indi-full`, PHD2 (+Xvfb, both enabled by default with a seeded `~/.phd2` profile so PHD2's RPC port answers headless; ~150–250 MB RAM for the pair is an accepted cost), astrometry.net + tycho2, ASTAP GUI/CLI + D50 |
 | PINS | `pins`, the five plugins and `pinsdaemon` from the signed apt repository |
 | First boot | root filesystem grows to the disk, SSH host keys are generated |
 | First login | plain shell; default credentials stay until changed by the user |
@@ -55,7 +55,7 @@ All settings are environment variables; the image build sets them as a preamble.
 | `PINS_APT_URI` | `https://github.com/<owner>/pins-x64/releases/latest/download` | apt source |
 | `PINS_IMAGE_REPO` | `NeutraleNull/pins-image` | fallback download of the overlay |
 | `PINS_OVERLAY_REF` | `main` | branch, tag or commit SHA the overlay fallback tarball is fetched from (`archive/<ref>.tar.gz`) |
-| `PINS_ENABLE_PHD2` | `0` | `1` enables `phd2.service` and `xvfb.service` |
+| `PINS_ENABLE_PHD2` | `1` | `0` opts out of `phd2.service` and `xvfb.service` (enabled by default since the seeded profile; the seed itself is written either way) |
 | `PINS_SKIP_SANITIZE` | `0` | `1` skips section 9; set automatically on a live system |
 
 ## Exit codes and the report file
