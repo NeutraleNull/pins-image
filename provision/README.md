@@ -51,7 +51,7 @@ All settings are environment variables; the image build sets them as a preamble.
 
 | Variable | Default | Effect |
 |---|---|---|
-| `PINS_SETUP_MODE` | `appliance` | `appliance` or `addon`. `addon` skips sections 2, 3, 8, 9 and the appliance Wi-Fi defaults in section 6; section 1b runs in both modes; addon masks the Wi-Fi watchdog timer and disables the daemon's startup Wi-Fi automanage (needs pinsdaemon ≥ 1.0.10 — earlier debs ship the unit as a real file in `/etc`, where the mask cannot take hold; the script then reports a `[FAIL]`) |
+| `PINS_SETUP_MODE` | `appliance` | `appliance` or `addon`. `addon` skips sections 2, 3, 8, 9 and the appliance Wi-Fi defaults in section 6; section 1b runs in both modes; addon masks the Wi-Fi watchdog timer and disables the daemon's startup Wi-Fi automanage (needs pinsdaemon ≥ 1.0.10 — earlier debs ship the unit as a real file in `/etc`, where the mask cannot take hold; the script then reports a `[FAIL]`), and preserves the machine's existing hostname in `/etc/pins/rig-name` (if not already present) so pinsdaemon's postinst cannot rename it to `pins-<hex>` |
 | `PINS_USER` | `pins` | device user — only affects account creation; `phd2.service`, `xvfb.service` and the pins deb hardcode `pins`, other values are unsupported |
 | `TARGET_HOSTNAME` | `pins` | hostname **and** `/etc/pins/rig-name` |
 | `PINS_HOTSPOT_SSID` | `pinspot` | SSID of the fallback AP |

@@ -36,8 +36,10 @@
 #                        ModemManager, and shadows gpsd's hotplug rules.
 #   addon                Someone's existing machine. Installs the software;
 #                        only intervention: masks brltty, ships the
-#                        ModemManager ignore rule and disables the daemon's
-#                        automatic Wi-Fi fallback.
+#                        ModemManager ignore rule, disables the daemon's
+#                        automatic Wi-Fi fallback and pins the existing
+#                        hostname in /etc/pins/rig-name so pinsdaemon
+#                        cannot rename the machine.
 #
 # Knobs, all overridable from the environment:
 #   PINS_SETUP_MODE        appliance | addon              (appliance)
@@ -574,6 +576,23 @@ fi
 for p in ninaapi touch-n-stars joko livestack polaralignment; do
     install_deb "pins-plugin-${p}_amd64.deb" "$REL/pins-plugin-${p}_amd64.deb" "plugin $p" || true
 done
+
+# --addon: preserve the machine's own hostname BEFORE pinsdaemon is installed.
+# Its postinst runs `pins-rig-name --ensure`; without a rig-name file that
+# invents `pins-<5 hex of the machine-id>` and RENAMES someone else's machine
+# (QA B-8). With the file present it respects what is there. Only written when
+# missing - a re-run or a real rig file must win. Appliance mode is untouched:
+# section 2c already wrote the file with $TARGET_HOSTNAME.
+if [ "$PINS_SETUP_MODE" = addon ] && [ ! -f /etc/pins/rig-name ]; then
+    CURRENT_HOSTNAME="$(hostname 2>/dev/null || true)"
+    if [ -n "$CURRENT_HOSTNAME" ]; then
+        install -d -m 0755 /etc/pins
+        printf '%s\n' "$CURRENT_HOSTNAME" > /etc/pins/rig-name
+        chmod 0644 /etc/pins/rig-name
+    else
+        note_fail "addon: could not read the current hostname to preserve it"
+    fi
+fi
 
 # --addon: this is someone's existing machine, and the daemon must not raise a
 # fallback hotspot on it (its startup hook does exactly that whenever no
