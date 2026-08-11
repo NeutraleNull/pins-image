@@ -27,7 +27,8 @@
 # Modes (PINS_SETUP_MODE, or --appliance / --addon):
 #
 #   appliance (default)  A machine dedicated to PINS. Also sets the hostname,
-#                        switches to NetworkManager, masks suspend and brltty.
+#                        switches to NetworkManager, masks suspend and
+#                        ModemManager, and shadows gpsd's hotplug rules.
 #   addon                Someone's existing machine. Installs the software and
 #                        touches nothing else. Prepared, not yet tested.
 #
@@ -221,11 +222,89 @@ apt_try software-properties-common wget ca-certificates curl gnupg unzip \
         cloud-guest-utils gdisk rsync dosfstools parted grub-efi-amd64-bin
 
 # ---------------------------------------------------------------------------
+# 1b. Serial-port protection (runs in BOTH modes)
+# ---------------------------------------------------------------------------
+# Astronomy gear hangs off USB-serial bridges (CH340, CP210x, FTDI, PL2303),
+# and three stock daemons fight the operator for exactly those ports: brltty,
+# ModemManager and gpsd. Everything here is chroot-safe - file operations plus
+# best-effort systemctl (enable/mask are file operations too).
+banner "Serial-port protection"
+
+# brltty. The braille daemon claims the CH340 USB-serial bridge (1a86:7523)
+# that focusers, mounts and filter wheels use, and takes the port away about a
+# tenth of a second after the kernel created it. The operator simply sees no
+# serial port. BOTH halves are needed: masking only the udev rule is not enough
+# because a running daemon still finds the device through libusb.
+#
+# The shadow file is written unconditionally: Ubuntu Server never preinstalls
+# brltty, so a "only if the package rule exists" guard would never fire there,
+# while desktops (the --addon case) are exactly where brltty is real. An inert
+# comment file costs nothing and protects against a later installation.
+#
+# The symlink half deliberately sits OUTSIDE any "is systemd running?" guard -
+# in the image build's chroot there is no /run/systemd/system, and that is
+# exactly how the upstream project lost this mask in its first attempt.
+install -d -m 0755 /etc/udev/rules.d
+cat > /etc/udev/rules.d/85-brltty.rules <<'EOF'
+# Installed by PINS. brltty claims the USB-serial bridges astronomy gear uses
+# (CH340, 1a86:7523 above all) and takes the port away right after the kernel
+# creates it. Same filename under /etc shadows the one in /usr/lib entirely.
+EOF
+for unit in brltty-udev.service brltty.service; do
+    systemctl mask "$unit" >/dev/null 2>&1 || true
+    [ -e "/etc/systemd/system/$unit" ] || ln -sf /dev/null "/etc/systemd/system/$unit"
+done
+
+# ModemManager, appliance only. It arrives as a Recommends of network-manager
+# and probes ttyUSB/ttyACM ports on hotplug - the CH340-based OnStep mount is
+# the practical victim. The mask also covers a LATER installation: apt and
+# deb-systemd-helper respect an existing mask, the package still installs fine.
+# In --addon mode ModemManager may be driving a real WWAN modem, so there it
+# only gets the ignore rule below.
+if [ "$PINS_SETUP_MODE" = appliance ]; then
+    systemctl mask ModemManager.service >/dev/null 2>&1 || true
+    [ -e /etc/systemd/system/ModemManager.service ] \
+        || ln -sf /dev/null /etc/systemd/system/ModemManager.service
+fi
+
+# Both modes: keep ModemManager away from the astro-typical USB-serial bridges
+# even where the daemon itself must stay usable. Prefix 77- so the rule is
+# evaluated before ModemManager's own 80-mm-*.rules.
+cat > /etc/udev/rules.d/77-pins-serial-ignore.rules <<'EOF'
+# Installed by PINS. Keep ModemManager away from the USB-serial bridges
+# astronomy gear uses, even where ModemManager itself must stay usable.
+ACTION!="add|change", GOTO="pins_mm_ignore_end"
+SUBSYSTEM!="usb", GOTO="pins_mm_ignore_end"
+ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", ENV{ID_MM_DEVICE_IGNORE}="1"
+ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", ENV{ID_MM_DEVICE_IGNORE}="1"
+ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6001", ENV{ID_MM_DEVICE_IGNORE}="1"
+ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6015", ENV{ID_MM_DEVICE_IGNORE}="1"
+ATTRS{idVendor}=="067b", ATTRS{idProduct}=="2303", ENV{ID_MM_DEVICE_IGNORE}="1"
+LABEL="pins_mm_ignore_end"
+EOF
+chmod 0644 /etc/udev/rules.d/77-pins-serial-ignore.rules /etc/udev/rules.d/85-brltty.rules
+
+# gpsd, appliance only (indi-full -> indi-gpsd -> gpsd). Its hotplug rules
+# grab FTDI/PL2303/CP210x for `gpsdctl add`. Shadowed unconditionally, same
+# filename trick as brltty; gpsd itself stays installed and a manually
+# configured GPS in /etc/default/gpsd (DEVICES=...) keeps working - only the
+# automatic port grabbing goes away. 60-gpsd.rules is the packaged filename on
+# noble (verified: dpkg -L gpsd -> /usr/lib/udev/rules.d/60-gpsd.rules); the
+# shadow only works when the name matches exactly.
+if [ "$PINS_SETUP_MODE" = appliance ]; then
+    cat > /etc/udev/rules.d/60-gpsd.rules <<'EOF'
+# Installed by PINS. gpsd's hotplug rules grab FTDI/PL2303/CP210x for gpsdctl;
+# a manually configured GPS in /etc/default/gpsd keeps working.
+EOF
+    chmod 0644 /etc/udev/rules.d/60-gpsd.rules
+fi
+
+# ---------------------------------------------------------------------------
 # 2. Local configuration (no network needed, so it comes first)
 # ---------------------------------------------------------------------------
 if [ "$PINS_SETUP_MODE" = appliance ]; then
 
-banner "User, home directories, hostname, suspend, brltty, journal"
+banner "User, home directories, hostname, suspend, journal"
 
 # 2a. user + groups. The image build's autoinstall creates the user; a hand
 # installation may not have one yet.
@@ -293,36 +372,14 @@ HandleHibernateKey=ignore
 IdleAction=ignore
 EOF
 
-# 2e. brltty. The braille daemon claims the CH340 USB-serial bridge (1a86:7523)
-# that focusers, mounts and filter wheels use, and takes the port away about a
-# tenth of a second after the kernel created it. The operator simply sees no
-# serial port. BOTH halves are needed: masking only the udev rule is not enough
-# because a running daemon still finds the device through libusb.
-#
-# The symlink half deliberately sits OUTSIDE any "is systemd running?" guard -
-# in the image build's chroot there is no /run/systemd/system, and that is
-# exactly how the upstream project lost this mask in its first attempt.
-if [ -f /usr/lib/udev/rules.d/85-brltty.rules ] || [ -f /lib/udev/rules.d/85-brltty.rules ]; then
-    install -d -m 0755 /etc/udev/rules.d
-    cat > /etc/udev/rules.d/85-brltty.rules <<'EOF'
-# Installed by PINS. brltty claims the USB-serial bridges astronomy gear uses
-# (CH340, 1a86:7523 above all) and takes the port away right after the kernel
-# creates it. Same filename under /etc shadows the one in /usr/lib entirely.
-EOF
-fi
-for unit in brltty-udev.service brltty.service; do
-    systemctl mask "$unit" >/dev/null 2>&1 || true
-    [ -e "/etc/systemd/system/$unit" ] || ln -sf /dev/null "/etc/systemd/system/$unit"
-done
-
-# 2f. persistent journal - without it every reboot erases the evidence of the
+# 2e. persistent journal - without it every reboot erases the evidence of the
 # night that just failed. Prefix 80- on purpose: the pinsdaemon package ships
 # the same setting as 90-, and the package keeps the last word.
 install -d -m 0755 /etc/systemd/journald.conf.d
 printf '[Journal]\nStorage=persistent\n' > /etc/systemd/journald.conf.d/80-pins-persistent.conf
 install -d -m 2755 /var/log/journal
 
-# 2g. shutdown/reboot for the device user - the Touch-N-Stars plugin offers
+# 2f. shutdown/reboot for the device user - the Touch-N-Stars plugin offers
 # those buttons. Every sudoers file this script writes is validated and removed
 # again if it does not parse: a broken file in sudoers.d disables sudo entirely.
 cat > /etc/sudoers.d/pins-power <<EOF
@@ -332,7 +389,7 @@ chmod 0440 /etc/sudoers.d/pins-power
 visudo -cf /etc/sudoers.d/pins-power >/dev/null \
     || { rm -f /etc/sudoers.d/pins-power; note_fail "sudoers pins-power"; }
 
-# 2h. overlay. Three sources, in order of trust: the payload ISO, the git
+# 2g. overlay. Three sources, in order of trust: the payload ISO, the git
 # checkout this script is part of, the published repository tarball.
 banner "Overlay"
 OVERLAY_SRC=""

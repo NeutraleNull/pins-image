@@ -37,7 +37,7 @@ Touch-N-Stars app.
 | PINS | `pins`, the five plugins and `pinsdaemon` from the signed apt repository |
 | First boot | root filesystem grows to the disk, SSH host keys are generated |
 | First login | plain shell; default credentials stay until changed by the user |
-| Hardware | suspend masked, brltty masked (it steals the CH340 serial bridge), persistent journal |
+| Hardware | suspend masked, brltty masked (it steals the CH340 serial bridge), ModemManager masked, `ID_MM_DEVICE_IGNORE` udev rule for the astro USB-serial bridges, gpsd hotplug rules shadowed, persistent journal |
 
 ## Knobs
 
