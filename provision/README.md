@@ -22,9 +22,15 @@ NetworkManager. On a machine you are logged into over the network, the SSH
 session can drop when NetworkManager takes over after the reboot. Run it on the
 console, or over a wired connection you can re-establish.
 
-After the reboot the device is reachable over SSH as `pins`/`pins`; changing
-the password is optional (`passwd`). Wi-Fi is configured through the
-Touch-N-Stars app.
+A device flashed from the **shipped image** is reachable over SSH as
+`pins`/`pins` after the reboot; changing the password is optional (`passwd`).
+Those credentials come from the image build's autoinstall, not from this
+script: a hand installation never sets or changes any password. If the `pins`
+user already exists it is left untouched (the script only adds it to the
+sudo/dialout/video/plugdev groups); if it is missing, `useradd` creates it
+with a **locked password** — set one with `sudo passwd pins` before logging
+out. `--addon` does not touch user accounts at all. Wi-Fi is configured
+through the Touch-N-Stars app.
 
 ## What it configures
 
@@ -45,7 +51,7 @@ All settings are environment variables; the image build sets them as a preamble.
 
 | Variable | Default | Effect |
 |---|---|---|
-| `PINS_SETUP_MODE` | `appliance` | `appliance` or `addon`. `addon` skips sections 2, 3, 8, 9 and the appliance Wi-Fi defaults in section 6; section 1b runs in both modes; addon masks the Wi-Fi watchdog timer and disables the daemon's startup Wi-Fi automanage (needs pinsdaemon ≥ 1.0.9 to be upgrade-safe) |
+| `PINS_SETUP_MODE` | `appliance` | `appliance` or `addon`. `addon` skips sections 2, 3, 8, 9 and the appliance Wi-Fi defaults in section 6; section 1b runs in both modes; addon masks the Wi-Fi watchdog timer and disables the daemon's startup Wi-Fi automanage (needs pinsdaemon ≥ 1.0.10 — earlier debs ship the unit as a real file in `/etc`, where the mask cannot take hold; the script then reports a `[FAIL]`) |
 | `PINS_USER` | `pins` | device user — only affects account creation; `phd2.service`, `xvfb.service` and the pins deb hardcode `pins`, other values are unsupported |
 | `TARGET_HOSTNAME` | `pins` | hostname **and** `/etc/pins/rig-name` |
 | `PINS_HOTSPOT_SSID` | `pinspot` | SSID of the fallback AP |

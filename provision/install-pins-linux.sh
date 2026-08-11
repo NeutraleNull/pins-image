@@ -590,14 +590,24 @@ if ! deb_installed_ok pinsdaemon; then
 fi
 
 # --addon: the pinsdaemon postinst enables the watchdog timer on every install
-# and upgrade, so a plain disable would not survive the next update. Mask it
-# (pinsdaemon >= 1.0.9 tolerates the mask in its postinst - `|| true` there;
-# on older versions an upgrade would fail on the masked unit).
+# and upgrade, so a plain disable would not survive the next update. Mask it.
+# Coupling: this needs pinsdaemon >= 1.0.10. Earlier packages ship the unit as
+# a REAL FILE in /etc/systemd/system, where `systemctl mask` fails with "File
+# already exists" and the symlink fallback below finds the file in the way;
+# 1.0.10 stages the units in /usr/lib/systemd/system and its postinst
+# tolerates the masked unit (`|| true`).
 if [ "$PINS_SETUP_MODE" = addon ]; then
     systemctl disable --now pins-wifi-watchdog.timer >/dev/null 2>&1 || true
     systemctl mask pins-wifi-watchdog.timer >/dev/null 2>&1 || true
     [ -e /etc/systemd/system/pins-wifi-watchdog.timer ] \
         || ln -sf /dev/null /etc/systemd/system/pins-wifi-watchdog.timer
+    # Verify LOUDLY (QA round 1: the mask silently did not stick against a
+    # pre-1.0.10 deb). is-enabled reports "masked" on a live system; the
+    # readlink covers the chroot case where only the symlink half could act.
+    if [ "$(systemctl is-enabled pins-wifi-watchdog.timer 2>/dev/null)" != "masked" ] \
+       && [ "$(readlink /etc/systemd/system/pins-wifi-watchdog.timer 2>/dev/null)" != "/dev/null" ]; then
+        note_fail "addon: pins-wifi-watchdog.timer could not be masked (pinsdaemon < 1.0.10 ships units in /etc)"
+    fi
 fi
 
 systemctl enable pins.service              >/dev/null 2>&1 || note_fail "enable pins"
