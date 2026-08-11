@@ -39,7 +39,7 @@ through the Touch-N-Stars app.
 | Hostname | `pins`, and `/etc/pins/rig-name` is written **before** pinsdaemon is installed so its postinst cannot rename the host to `pins-<hex>` |
 | Network | NetworkManager as the netplan renderer, `systemd-networkd` disabled |
 | Wi-Fi | fallback hotspot `pinspot` (WPA2), shipped as `desired_mode=hotspot`; watchdog first run 20 s after boot, then every 60 s; the AP profile is created with autoconnect=no — the daemon raises it |
-| Astronomy | `indi-full`, PHD2 (+Xvfb, both enabled by default with a seeded `~/.PHDGuidingV2` config — the dotfile in the home directory, starting with `ConfigVersion=2001` so PHD2's first-run wizard never fires and the RPC port answers with a defined profile; ~150–250 MB RAM for the pair is an accepted cost), astrometry.net + tycho2, ASTAP GUI/CLI + D50 |
+| Astronomy | `indi-full`, PHD2 (+Xvfb, both enabled by default with a seeded `~/.PHDGuidingV2` config — the dotfile in the home directory, starting with `ConfigVersion=2001` so PHD2's first-run wizard never fires and the RPC port answers with a defined profile; ~150–250 MB RAM for the pair is an accepted cost), astrometry.net + tycho2, ASTAP GUI/CLI + D50 (`/usr/share/astap/data` is symlinked to `/opt/astap` — astap_cli hardcodes the former as database dir while the D50 deb installs into the latter; missing astap_cli or D50 is reported as a `[FAIL]`) |
 | PINS | `pins`, the five plugins, `pinsdaemon` and `phd2` (our fork build — no `ppa:pch/phd2` anymore; the mutlaqja PPA stays for its `libindi1` runtime dependency) from the signed apt repository |
 | First boot | root filesystem grows to the disk, SSH host keys are generated |
 | First login | plain shell; default credentials stay until changed by the user |

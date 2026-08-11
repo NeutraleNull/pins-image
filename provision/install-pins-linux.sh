@@ -737,6 +737,21 @@ fi
 
 install_deb "d50_star_database.deb" "${SF}/star_databases/d50_star_database.deb" "astap d50" || true
 
+# astap_cli hardcodes its database dir to /usr/share/astap/data/ whenever the
+# executable lives under /usr (astap_command_line.lpr). The d50 deb installs
+# the database into /opt/astap. Bridge the two or plate solving dies with
+# "no star database found" (field-tested failure, 2026-08-11). ln -sfn keeps
+# this idempotent; runs in both modes, like all of section 7.
+mkdir -p /usr/share/astap
+ln -sfn /opt/astap /usr/share/astap/data
+
+# Every download above is non-fatal by design, but a silently missing
+# astap_cli or database means plate solving is dead and the operator only
+# sees an empty path field in NINA. Say it loudly instead.
+if [ ! -x /usr/local/bin/astap_cli ] || ! compgen -G "/opt/astap/d50_*.1476" >/dev/null; then
+    note_fail "astap_cli or D50 star database missing - plate solving will not work"
+fi
+
 # ---------------------------------------------------------------------------
 # 8. First-boot units
 # ---------------------------------------------------------------------------
