@@ -1,4 +1,9 @@
 #!/bin/bash
+# Derived from NINA.Polaris scripts/install-polaris-linux.sh (AGPL-3.0).
+# Upstream: https://github.com/DanWBR/NINA.Polaris
+# Changes: structure and text blocks only (FAILED/banner/note_fail/apt_recover,
+#          fetch(), payload-ISO pattern, install_deb(), brltty section);
+#          everything else is new. See NOTICE.md for the full provenance table.
 # =============================================================================
 # PINS x64 - Linux provisioning
 # =============================================================================
@@ -37,6 +42,8 @@
 # Knobs, all overridable from the environment:
 #   PINS_SETUP_MODE        appliance | addon              (appliance)
 #   PINS_USER              device user                    (pins)
+#                          (only affects account creation; phd2.service and
+#                          the pins deb hardcode pins)
 #   TARGET_HOSTNAME        hostname AND /etc/pins/rig-name (pins)
 #   PINS_HOTSPOT_SSID      SSID of the fallback AP        (pinspot)
 #   PINS_HOTSPOT_SECURITY  wpa-psk (only value supported) (wpa-psk)
@@ -44,6 +51,7 @@
 #   PINS_REPO_OWNER        GitHub owner of pins-x64       (NeutraleNull)
 #   PINS_APT_URI           apt source URI                 (<owner>/pins-x64 releases)
 #   PINS_IMAGE_REPO        overlay fallback download      (NeutraleNull/pins-image)
+#   PINS_OVERLAY_REF       branch/tag/SHA for the overlay fallback (main)
 #   PINS_ENABLE_PHD2       1 = enable phd2 + xvfb         (0)
 #   PINS_SKIP_SANITIZE     1 = skip section 9             (0, auto 1 on a live system)
 #
@@ -81,6 +89,7 @@ PINS_HOTSPOT_PASSWORD="${PINS_HOTSPOT_PASSWORD:-}"
 PINS_REPO_OWNER="${PINS_REPO_OWNER:-NeutraleNull}"
 PINS_APT_URI="${PINS_APT_URI:-https://github.com/${PINS_REPO_OWNER}/pins-x64/releases/latest/download}"
 PINS_IMAGE_REPO="${PINS_IMAGE_REPO:-NeutraleNull/pins-image}"
+PINS_OVERLAY_REF="${PINS_OVERLAY_REF:-main}"
 PINS_ENABLE_PHD2="${PINS_ENABLE_PHD2:-0}"
 # Remember whether the caller SET this, not just what it says: on a live system
 # the default flips to 1 (see below), and only an explicit assignment may
@@ -94,7 +103,7 @@ for arg in "$@"; do
     case "$arg" in
         --appliance) PINS_SETUP_MODE=appliance ;;
         --addon)     PINS_SETUP_MODE=addon ;;
-        -h|--help)   sed -n '2,60p' "$0" | sed 's/^# \?//'; exit 0 ;;
+        -h|--help)   sed -n '2,76p' "$0" | sed 's/^# \?//'; exit 0 ;;
         *) echo "unknown option: $arg (try --help)" >&2; exit 2 ;;
     esac
 done
@@ -399,7 +408,11 @@ if [ -n "$PAYLOAD" ] && [ -s "$PAYLOAD/overlay.tar.gz" ]; then
     OVERLAY_SRC="tar:$PAYLOAD/overlay.tar.gz"
 elif [ -n "$SCRIPT_DIR" ] && [ -d "$SCRIPT_DIR/overlay" ]; then
     OVERLAY_SRC="dir:$SCRIPT_DIR/overlay"
-elif fetch "https://github.com/${PINS_IMAGE_REPO}/archive/refs/heads/main.tar.gz" \
+# archive/<ref> on purpose, not archive/refs/heads/<ref>: the latter only
+# resolves branches, while this form takes a branch, a tag or a commit SHA -
+# that is what makes PINS_OVERLAY_REF a real pinning knob (default: main,
+# consistent with a script that is itself fetched from main).
+elif fetch "https://github.com/${PINS_IMAGE_REPO}/archive/${PINS_OVERLAY_REF}.tar.gz" \
            "$WORKDIR/pins-image.tar.gz"; then
     OVERLAY_SRC="repo:$WORKDIR/pins-image.tar.gz"
 fi
@@ -635,6 +648,18 @@ EOF
                                       /opt/pinsdaemon/app/hotspot_config.json 2>/dev/null || true
 else
     note_fail "pinsdaemon wifi configuration (/opt/pinsdaemon/app missing)"
+fi
+
+# The pinsdaemon postinst runs pins-rig-name --ensure. Since 1.0.8 it honours
+# /etc/pins/rig-name, but do not trust ordering alone (QA B-1/B-3): verify, and
+# repair loudly if anything renamed the host behind our back.
+if [ "$(head -n1 /etc/pins/rig-name 2>/dev/null)" != "$TARGET_HOSTNAME" ] \
+   || [ "$(head -n1 /etc/hostname 2>/dev/null)" != "$TARGET_HOSTNAME" ]; then
+    printf '%s\n' "$TARGET_HOSTNAME" > /etc/pins/rig-name
+    printf '%s\n' "$TARGET_HOSTNAME" > /etc/hostname
+    hostname "$TARGET_HOSTNAME" 2>/dev/null || true
+    sed -i "s/^127\.0\.1\.1.*/127.0.1.1 ${TARGET_HOSTNAME}/" /etc/hosts
+    note_fail "hostname drifted after pinsdaemon install (repaired)"
 fi
 
 fi  # end appliance-only Wi-Fi defaults

@@ -46,7 +46,7 @@ All settings are environment variables; the image build sets them as a preamble.
 | Variable | Default | Effect |
 |---|---|---|
 | `PINS_SETUP_MODE` | `appliance` | `appliance` or `addon`. `addon` skips sections 2, 3, 8, 9 and the appliance Wi-Fi defaults in section 6; section 1b runs in both modes; addon masks the Wi-Fi watchdog timer and disables the daemon's startup Wi-Fi automanage (needs pinsdaemon ≥ 1.0.9 to be upgrade-safe) |
-| `PINS_USER` | `pins` | device user |
+| `PINS_USER` | `pins` | device user — only affects account creation; `phd2.service`, `xvfb.service` and the pins deb hardcode `pins`, other values are unsupported |
 | `TARGET_HOSTNAME` | `pins` | hostname **and** `/etc/pins/rig-name` |
 | `PINS_HOTSPOT_SSID` | `pinspot` | SSID of the fallback AP |
 | `PINS_HOTSPOT_SECURITY` | `wpa-psk` | only `wpa-psk` is supported by the shipped `wifi-connect.sh` |
@@ -54,6 +54,7 @@ All settings are environment variables; the image build sets them as a preamble.
 | `PINS_REPO_OWNER` | `NeutraleNull` | GitHub owner of `pins-x64` |
 | `PINS_APT_URI` | `https://github.com/<owner>/pins-x64/releases/latest/download` | apt source |
 | `PINS_IMAGE_REPO` | `NeutraleNull/pins-image` | fallback download of the overlay |
+| `PINS_OVERLAY_REF` | `main` | branch, tag or commit SHA the overlay fallback tarball is fetched from (`archive/<ref>.tar.gz`) |
 | `PINS_ENABLE_PHD2` | `0` | `1` enables `phd2.service` and `xvfb.service` |
 | `PINS_SKIP_SANITIZE` | `0` | `1` skips section 9; set automatically on a live system |
 
