@@ -18,10 +18,10 @@
 #
 #   - NetworkManager as the netplan renderer (pinsdaemon's Wi-Fi handling
 #     requires it; Ubuntu Server ships systemd-networkd)
-#   - INDI (indi-full) and PHD2 from their PPAs, astrometry.net + tycho2
+#   - INDI (indi-full) from the mutlaqja PPA, astrometry.net + tycho2
 #   - ASTAP (GUI + CLI) and the D50 star database
 #   - the PINS stack from our signed apt repository: pins, the plugins,
-#     pinsdaemon
+#     pinsdaemon, and PHD2 (our fork build, no longer the pch/phd2 PPA)
 #   - first-boot units (grow root, generate SSH host keys) from
 #     provision/overlay
 #
@@ -503,13 +503,15 @@ fi
 # ---------------------------------------------------------------------------
 # 4. PPAs and the astronomy stack
 # ---------------------------------------------------------------------------
-banner "PPAs (INDI + PHD2)"
+banner "PPA (INDI)"
+# mutlaqja is MANDATORY even though PHD2 no longer comes from a PPA: our phd2
+# deb (section 6) depends on libindi1 at runtime, which only exists in this
+# PPA - the noble archive stops at libindi 1.9.9 without a libindi1 package.
 add-apt-repository -y ppa:mutlaqja/ppa || note_fail "ppa mutlaqja"
-add-apt-repository -y ppa:pch/phd2     || note_fail "ppa pch/phd2"
 apt-get update || note_fail "apt update (ppa)"
 
-banner "INDI + PHD2 + astrometry + services"
-apt_try indi-full phd2 xvfb astrometry.net astrometry-data-tycho2 \
+banner "INDI + astrometry + services"
+apt_try indi-full xvfb astrometry.net astrometry-data-tycho2 \
         openssh-server avahi-daemon libnss-mdns
 # gsc only exists in the mutlaqja PPA, not in the Ubuntu archive, and it is only
 # needed by the INDI CCD simulator. Separate call so a miss cannot drag the
@@ -553,6 +555,15 @@ apt-get update || note_fail "apt update (pins repo)"
 # ---------------------------------------------------------------------------
 banner "PINS stack"
 REL="https://github.com/${PINS_REPO_OWNER}/pins-x64/releases/latest/download"
+
+# PHD2 comes from our flat repo (fork build against the mutlaqja libindi ABI),
+# not from ppa:pch/phd2 anymore. Deliberately BEFORE pins: pins carries
+# Recommends: phd2, and with phd2 already installed apt satisfies that from
+# the payload/flat repo instead of going online. This must stay in section 6 -
+# the deb needs the pins apt source (section 5) or the payload ISO, so
+# installing it with the astronomy stack in section 4 would be too early.
+# A failure is recorded by install_deb itself (note_fail), never fatal.
+install_deb "phd2_amd64.deb" "$REL/phd2_amd64.deb" "phd2" || true
 
 if install_deb "pins_amd64.deb" "$REL/pins_amd64.deb" "pins"; then
     deb_installed_ok pins || note_crit "pins"
