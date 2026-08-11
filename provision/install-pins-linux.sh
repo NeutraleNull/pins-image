@@ -29,8 +29,10 @@
 #   appliance (default)  A machine dedicated to PINS. Also sets the hostname,
 #                        switches to NetworkManager, masks suspend and
 #                        ModemManager, and shadows gpsd's hotplug rules.
-#   addon                Someone's existing machine. Installs the software and
-#                        touches nothing else. Prepared, not yet tested.
+#   addon                Someone's existing machine. Installs the software;
+#                        only intervention: masks brltty, ships the
+#                        ModemManager ignore rule and disables the daemon's
+#                        automatic Wi-Fi fallback.
 #
 # Knobs, all overridable from the environment:
 #   PINS_SETUP_MODE        appliance | addon              (appliance)
@@ -549,6 +551,22 @@ for p in ninaapi touch-n-stars joko livestack polaralignment; do
     install_deb "pins-plugin-${p}_amd64.deb" "$REL/pins-plugin-${p}_amd64.deb" "plugin $p" || true
 done
 
+# --addon: this is someone's existing machine, and the daemon must not raise a
+# fallback hotspot on it (its startup hook does exactly that whenever no
+# wifi_config.json exists). Written BEFORE the package so that already the
+# first daemon start reads it - the postinst does daemon-reload + restart.
+# The Touch-N-Stars network UI (wifi-connect.sh via API) keeps working.
+if [ "$PINS_SETUP_MODE" = addon ]; then
+    install -d -m 0755 /etc/systemd/system/sysupdate-api.service.d
+    cat > /etc/systemd/system/sysupdate-api.service.d/10-pins-addon.conf <<'EOF'
+# PINS --addon: this is someone's existing machine. The daemon must not
+# raise a fallback hotspot on it; Wi-Fi stays under the owner's control.
+# The Touch-N-Stars network UI (wifi-connect.sh via API) keeps working.
+[Service]
+Environment=STARTUP_WIFI_AUTOMANAGE_ENABLED=false
+EOF
+fi
+
 install_deb "pinsdaemon_amd64.deb" "$REL/pinsdaemon_amd64.deb" "pinsdaemon" || true
 if ! deb_installed_ok pinsdaemon; then
     # Its postinst builds a Python venv and runs pip; without PyPI access that
@@ -558,8 +576,22 @@ if ! deb_installed_ok pinsdaemon; then
     deb_installed_ok pinsdaemon || note_crit "pinsdaemon"
 fi
 
+# --addon: the pinsdaemon postinst enables the watchdog timer on every install
+# and upgrade, so a plain disable would not survive the next update. Mask it
+# (pinsdaemon >= 1.0.9 tolerates the mask in its postinst - `|| true` there;
+# on older versions an upgrade would fail on the masked unit).
+if [ "$PINS_SETUP_MODE" = addon ]; then
+    systemctl disable --now pins-wifi-watchdog.timer >/dev/null 2>&1 || true
+    systemctl mask pins-wifi-watchdog.timer >/dev/null 2>&1 || true
+    [ -e /etc/systemd/system/pins-wifi-watchdog.timer ] \
+        || ln -sf /dev/null /etc/systemd/system/pins-wifi-watchdog.timer
+fi
+
 systemctl enable pins.service              >/dev/null 2>&1 || note_fail "enable pins"
 systemctl enable sysupdate-api.service     >/dev/null 2>&1 || note_fail "enable sysupdate-api"
+
+if [ "$PINS_SETUP_MODE" = appliance ]; then
+
 systemctl enable pins-wifi-watchdog.timer  >/dev/null 2>&1 || note_fail "enable wifi watchdog timer"
 
 # --- pinsdaemon Wi-Fi configuration (AP7) ---------------------------------
@@ -596,12 +628,16 @@ EOF
     "channel": null
 }
 EOF
-    chmod 0644 /opt/pinsdaemon/app/wifi_config.json /opt/pinsdaemon/app/hotspot_config.json
+    # 0600: hotspot_config.json carries the AP password, and nobody but the
+    # daemon (owner) and root-run scripts ever reads either file.
+    chmod 0600 /opt/pinsdaemon/app/wifi_config.json /opt/pinsdaemon/app/hotspot_config.json
     chown sysupdate-api:sysupdate-api /opt/pinsdaemon/app/wifi_config.json \
                                       /opt/pinsdaemon/app/hotspot_config.json 2>/dev/null || true
 else
     note_fail "pinsdaemon wifi configuration (/opt/pinsdaemon/app missing)"
 fi
+
+fi  # end appliance-only Wi-Fi defaults
 
 # ---------------------------------------------------------------------------
 # 7. ASTAP + D50 star database

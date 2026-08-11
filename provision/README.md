@@ -32,7 +32,7 @@ Touch-N-Stars app.
 |---|---|
 | Hostname | `pins`, and `/etc/pins/rig-name` is written **before** pinsdaemon is installed so its postinst cannot rename the host to `pins-<hex>` |
 | Network | NetworkManager as the netplan renderer, `systemd-networkd` disabled |
-| Wi-Fi | fallback hotspot `pinspot` (WPA2), shipped as `desired_mode=hotspot`, watchdog first run 20 s after boot |
+| Wi-Fi | fallback hotspot `pinspot` (WPA2), shipped as `desired_mode=hotspot`; watchdog first run 20 s after boot, then every 60 s; the AP profile is created with autoconnect=no — the daemon raises it |
 | Astronomy | `indi-full`, PHD2 (+Xvfb, both disabled by default), astrometry.net + tycho2, ASTAP GUI/CLI + D50 |
 | PINS | `pins`, the five plugins and `pinsdaemon` from the signed apt repository |
 | First boot | root filesystem grows to the disk, SSH host keys are generated |
@@ -45,7 +45,7 @@ All settings are environment variables; the image build sets them as a preamble.
 
 | Variable | Default | Effect |
 |---|---|---|
-| `PINS_SETUP_MODE` | `appliance` | `appliance` or `addon` (`addon` skips sections 2, 3, 8 and 9 — prepared, not tested) |
+| `PINS_SETUP_MODE` | `appliance` | `appliance` or `addon`. `addon` skips sections 2, 3, 8, 9 and the appliance Wi-Fi defaults in section 6; section 1b runs in both modes; addon masks the Wi-Fi watchdog timer and disables the daemon's startup Wi-Fi automanage (needs pinsdaemon ≥ 1.0.9 to be upgrade-safe) |
 | `PINS_USER` | `pins` | device user |
 | `TARGET_HOSTNAME` | `pins` | hostname **and** `/etc/pins/rig-name` |
 | `PINS_HOTSPOT_SSID` | `pinspot` | SSID of the fallback AP |
