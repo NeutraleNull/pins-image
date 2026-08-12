@@ -608,6 +608,33 @@ for p in ninaapi touch-n-stars joko livestack polaralignment; do
     install_deb "pins-plugin-${p}_amd64.deb" "$REL/pins-plugin-${p}_amd64.deb" "plugin $p" || true
 done
 
+# The plugin debs unpack into the device user's home as root, and NINA runs as
+# that user. Plugins that write next to their own assembly - ninaAPI does, for
+# temp.png and its thumbnail cache - then die with UnauthorizedAccessException,
+# which surfaced as HTTP 500 on every capture through the app (measured on the
+# 20260811 image). Hand the tree back to its owner.
+if [ -d "${PHOME:-/home/$PINS_USER}/.local/share/NINA/Plugins" ]; then
+    chown -R "$PINS_USER:$PINS_USER" "${PHOME:-/home/$PINS_USER}/.local/share/NINA/Plugins" \
+        || note_fail "chown NINA plugin directory"
+fi
+
+# pins P/Invokes the UNVERSIONED soname (libcfitsio.so, libraw.so), which only
+# ships with the -dev packages; the runtime packages install libcfitsio.so.10
+# and libraw.so.23 only. Without the link every INDI camera fails at download
+# time with "Unable to load shared library 'libcfitsio.so'" - i.e. not a single
+# exposure can be taken (measured, 20260811). Pulling the -dev packages in just
+# for a symlink would drag headers and a compiler onto the appliance, so link
+# the newest soname we find. Idempotent, runs in both modes.
+for lib in cfitsio raw; do
+    target="$(ls -1 /usr/lib/*/lib${lib}.so.[0-9]* 2>/dev/null | sort -V | tail -n1)"
+    if [ -n "$target" ]; then
+        ln -sfn "$target" "$(dirname "$target")/lib${lib}.so"
+    else
+        note_fail "lib${lib} runtime not found - INDI camera downloads (cfitsio) or DSLR raws (raw) will fail"
+    fi
+done
+ldconfig 2>/dev/null || true
+
 # --addon: preserve the machine's own hostname BEFORE pinsdaemon is installed.
 # Its postinst runs `pins-rig-name --ensure`; without a rig-name file that
 # invents `pins-<5 hex of the machine-id>` and RENAMES someone else's machine
@@ -851,6 +878,12 @@ rm -rf /var/lib/NetworkManager/*.lease /var/lib/NetworkManager/seen-bssids \
 rm -rf /opt/pinsdaemon/logs/* 2>/dev/null || true
 find /var/log -type f -exec truncate -s 0 {} +
 rm -f /root/provision.sh /root/.bash_history "${PHOME:-/home/$PINS_USER}/.bash_history" 2>/dev/null || true
+# PHD2's single-instance lock must NEVER be part of the image. It carries the
+# PID of the build-time PHD2, and on the flashed device that number belongs to
+# somebody else - PHD2 then refuses to start its RPC server (see the comment in
+# phd2.service). Measured on the 20260811 image: the lock held PID 996, which
+# was NINA, and port 4400 stayed shut.
+rm -f "${PHOME:-/home/$PINS_USER}"/phd2.[0-9]* 2>/dev/null || true
 
 # Zero the free space so the image compresses. Best effort by definition: this
 # is expected to end with "no space left on device".

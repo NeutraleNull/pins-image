@@ -1,11 +1,10 @@
 [Unit]
 # PHD2 guiding, headless, on the Xvfb display from xvfb.service.
 #
-# Shipped DISABLED. PHD2 is only useful once an equipment profile exists in
-# ~/.phd2, and that profile is created interactively; an enabled-but-unprofiled
-# PHD2 would just restart-loop in the journal. The device API may turn it on
-# later -- the pinsdaemon sudoers whitelist already permits systemctl on phd2 --
-# or the provisioning script can do it with PINS_ENABLE_PHD2=1.
+# Enabled by default (O5 revision): the provisioning seeds ~/.PHDGuidingV2, so
+# PHD2 comes up with a usable profile instead of parking its JSON-RPC port
+# behind the first-run wizard. PINS_ENABLE_PHD2=0 opts out, and the pinsdaemon
+# sudoers whitelist lets the device API toggle the unit later.
 #
 # Requires= (not Wants=) on xvfb.service: without the display PHD2 exits
 # immediately, so starting it without the framebuffer is never right.
@@ -18,6 +17,17 @@ Type=simple
 User=pins
 Group=pins
 Environment=DISPLAY=:99
+# Drop a stale single-instance lock. wxSingleInstanceChecker writes ~/phd2.<N>
+# with its PID and only tests whether that PID is still alive - it cannot tell
+# "my older self" from "an unrelated process that inherited the number". A lock
+# left behind by a hard power-off (or, as actually happened, baked into the
+# image at build time) therefore blocks PHD2 for good once the recorded PID is
+# taken again: PHD2 puts a modal error box on the invisible Xvfb display and
+# never reaches StartServer(), so port 4400 stays shut and the app shows the
+# guider offline. pgrep-guarded, so a PHD2 that someone really did start by
+# hand (over VNC) keeps its lock instead of ending up as a second instance on
+# the same profile.
+ExecStartPre=-/bin/sh -c 'pgrep -x phd2.bin >/dev/null || rm -f /home/pins/phd2.[0-9]*'
 ExecStart=/usr/bin/phd2
 Restart=on-failure
 RestartSec=5
