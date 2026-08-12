@@ -855,6 +855,54 @@ fi
 
 install -d -m 0755 /var/lib/pins
 rm -f /var/lib/pins/growroot.done          # a flashed image must grow on first boot
+
+# Where the frames go. The pins.service drop-in points XDG_DOCUMENTS_DIR here so
+# NINA's default image path becomes absolute (see the drop-in for why a relative
+# one silently kills the whole ImageSaved event); .NET only honours the variable
+# if the directory actually exists.
+install -d -m 0755 -o "$PINS_USER" -g "$PINS_USER" "$PHOME/Bilder" \
+    || note_fail "image directory $PHOME/Bilder"
+
+# Turn ninaAPI's thumbnail cache off. Its CacheThumbnail() encodes a JPEG
+# through the WPF compat layer and SEGFAULTS the entire NINA process - measured
+# twice on the 20260811 image, each time leaving a 0-byte thumbnails-<pid>/0.jpg
+# behind, systemd restarting pins, and the in-memory image history lost with it.
+# Ruled out as causes: the OpenCvSharp managed/native pairing (4.11 wrapper
+# against our 4.13 native reproduces the same call chain cleanly in isolation)
+# and LiveStack as a second ImageSaved subscriber (crash persists without it).
+# The real fix belongs in pins/ninaAPI; until then this is the interlock that
+# makes the absolute image path above safe to ship. Thumbnails can be turned
+# back on in the plugin's settings once the crash is fixed.
+NINA_USERCONFIG="$(find "$PHOME/.local/share" -maxdepth 4 -name user.config -path '*N.I.N.A*' 2>/dev/null | head -n1)"
+if [ -n "$NINA_USERCONFIG" ]; then
+    systemctl stop pins >/dev/null 2>&1 || true      # no-op in a chroot
+    python3 - "$NINA_USERCONFIG" <<'PY' || note_fail "disable ninaAPI thumbnails"
+import sys, xml.etree.ElementTree as ET
+path = sys.argv[1]
+tree = ET.parse(path)
+settings = tree.getroot().find("userSettings")
+if settings is None:
+    raise SystemExit("no userSettings section")
+section = settings.find("ninaAPI.Properties.Settings")
+if section is None:
+    section = ET.SubElement(settings, "ninaAPI.Properties.Settings")
+for entry in section.findall("setting"):
+    if entry.get("name") == "CreateThumbnails":
+        section.remove(entry)
+entry = ET.SubElement(section, "setting")
+entry.set("name", "CreateThumbnails")
+entry.set("serializeAs", "String")
+ET.SubElement(entry, "value").text = "False"
+tree.write(path, encoding="utf-8", xml_declaration=True)
+PY
+    chown "$PINS_USER:$PINS_USER" "$NINA_USERCONFIG" 2>/dev/null || true
+    systemctl start pins >/dev/null 2>&1 || true
+else
+    # Only reachable when NINA has never run here (a hand installation right
+    # after the package). Say it, because the setting decides between a working
+    # image history and a crash after every frame.
+    note_fail "NINA user.config not found - ninaAPI thumbnails NOT disabled (see the phd2/history diagnosis)"
+fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -884,6 +932,13 @@ rm -f /root/provision.sh /root/.bash_history "${PHOME:-/home/$PINS_USER}/.bash_h
 # phd2.service). Measured on the 20260811 image: the lock held PID 996, which
 # was NINA, and port 4400 stayed shut.
 rm -f "${PHOME:-/home/$PINS_USER}"/phd2.[0-9]* 2>/dev/null || true
+# The NINA profile of the BUILD host is per-device state, like the machine-id
+# and the SSH host keys. It also carries the image path that was computed
+# before the XDG_DOCUMENTS_DIR drop-in existed - a relative one, which breaks
+# the ImageSaved event. Dropping it lets the flashed device mint a fresh
+# profile on first boot, with the absolute path.
+rm -f "${PHOME:-/home/$PINS_USER}"/.local/share/NINA/Profiles/*.profile \
+      "${PHOME:-/home/$PINS_USER}"/.local/share/NINA/Profiles/*.profile.bkp 2>/dev/null || true
 
 # Zero the free space so the image compresses. Best effort by definition: this
 # is expected to end with "no space left on device".
