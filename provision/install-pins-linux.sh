@@ -937,6 +937,10 @@ rm -f "${PHOME:-/home/$PINS_USER}"/phd2.[0-9]* 2>/dev/null || true
 # before the XDG_DOCUMENTS_DIR drop-in existed - a relative one, which breaks
 # the ImageSaved event. Dropping it lets the flashed device mint a fresh
 # profile on first boot, with the absolute path.
+# pins has to be STOPPED first and stays stopped: NINA keeps the profile in
+# memory and writes it back when it exits, so deleting the file underneath a
+# running instance only means it reappears at power-off - inside the image.
+systemctl stop pins >/dev/null 2>&1 || true         # no-op in a chroot
 rm -f "${PHOME:-/home/$PINS_USER}"/.local/share/NINA/Profiles/*.profile \
       "${PHOME:-/home/$PINS_USER}"/.local/share/NINA/Profiles/*.profile.bkp 2>/dev/null || true
 
