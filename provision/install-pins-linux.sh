@@ -47,6 +47,7 @@
 #                          (only affects account creation; phd2.service and
 #                          the pins deb hardcode pins)
 #   TARGET_HOSTNAME        hostname AND /etc/pins/rig-name (pins)
+#   PINS_TIMEZONE          IANA zone, appliance mode only (Europe/Berlin)
 #   PINS_HOTSPOT_SSID      SSID of the fallback AP        (pinspot)
 #   PINS_HOTSPOT_SECURITY  wpa-psk (only value supported) (wpa-psk)
 #   PINS_HOTSPOT_PASSWORD  8-63 chars, empty = daemon default (empty)
@@ -85,6 +86,7 @@ export DEBIAN_FRONTEND=noninteractive
 PINS_SETUP_MODE="${PINS_SETUP_MODE:-appliance}"
 PINS_USER="${PINS_USER:-pins}"
 TARGET_HOSTNAME="${TARGET_HOSTNAME:-pins}"
+PINS_TIMEZONE="${PINS_TIMEZONE:-Europe/Berlin}"
 PINS_HOTSPOT_SSID="${PINS_HOTSPOT_SSID:-pinspot}"
 PINS_HOTSPOT_SECURITY="${PINS_HOTSPOT_SECURITY:-wpa-psk}"
 PINS_HOTSPOT_PASSWORD="${PINS_HOTSPOT_PASSWORD:-}"
@@ -391,6 +393,35 @@ EOF
 install -d -m 0755 /etc/systemd/journald.conf.d
 printf '[Journal]\nStorage=persistent\n' > /etc/systemd/journald.conf.d/80-pins-persistent.conf
 install -d -m 2755 /var/log/journal
+
+# 2e2. clock. Ubuntu Server leaves a fresh install on UTC, and nothing ever moves
+# it: the app only pushes its own timezone as a side effect of correcting the
+# TIME, and it compares absolute timestamps (store.js: `if (diff > 5)`). A device
+# whose epoch is right from NTP but whose zone is UTC therefore stays on UTC
+# forever - which is what put the log stamps and the astronomy times two hours
+# off in the field. So the appliance ships with a real timezone.
+# timedatectl is not usable here (no bus in a chroot); the two files below are
+# exactly what it would write, and they are what the next boot reads.
+if [ -f "/usr/share/zoneinfo/$PINS_TIMEZONE" ]; then
+    ln -sf "/usr/share/zoneinfo/$PINS_TIMEZONE" /etc/localtime
+    printf '%s\n' "$PINS_TIMEZONE" > /etc/timezone
+    chmod 0644 /etc/timezone
+else
+    note_fail "unknown timezone $PINS_TIMEZONE (/etc/localtime unchanged)"
+fi
+# NTP stays the primary source whenever the rig has internet. Explicit enable
+# because pinsdaemon's POST /system/time runs `timedatectl set-ntp false` before
+# it sets the clock - a device that was ever time-synced from the app has the
+# unit disabled, and a re-run of this script should hand it back.
+# unmask first: enable cannot resurrect a masked unit, and it is the one state
+# an enable would silently fail on.
+systemctl unmask systemd-timesyncd >/dev/null 2>&1
+systemctl enable systemd-timesyncd >/dev/null 2>&1 \
+    || note_fail "enable systemd-timesyncd"
+systemctl start systemd-timesyncd >/dev/null 2>&1 || true   # no-op in a chroot
+# The hardware clock is UTC (Linux-only appliance); /etc/adjtime says so
+# explicitly, otherwise a BIOS set to local time drags the system clock along.
+printf '0.0 0 0.0\n0\nUTC\n' > /etc/adjtime
 
 # 2f. shutdown/reboot for the device user - the Touch-N-Stars plugin offers
 # those buttons. Every sudoers file this script writes is validated and removed
